@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Círculo Alocado Controlado por la Voz</title>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: #FFCCCC; /* Rojo pastel */
+        transition: background-color 0.5s;
+        font-family: Arial, sans-serif;
+    }
+
+    #circulo {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: blue;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        transition: top 0.1s, left 0.1s, background-color 0.5s;
+    }
+
+    #datos {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        font-size: 16px;
+        color: white;
+    }
+</style>
+</head>
+<body>
+    <div id="circulo"></div>
+    <div id="datos">Pitch: <span id="pitch"></span>, Volumen: <span id="volumen"></span></div>
+    <script>
+        // Función para calcular el pitch
+        function calcularLocuraDeLaVoz(buffer) {
+            let suma = 0;
+            for (let i = 0; i < buffer.length; i++) {
+                suma += buffer[i];
+            }
+            let promedio = suma / buffer.length;
+            let locura = Math.abs(promedio);
+            return locura;
+        }
+
+        // Acceder al micrófono
+        navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+            let contextoDeAudio = new AudioContext();
+            let analizador = contextoDeAudio.createAnalyser();
+            let microfono = contextoDeAudio.createMediaStreamSource(stream);
+            let nodoDeProcesamiento = contextoDeAudio.createScriptProcessor(2048, 1, 1);
+
+            analizador.smoothingTimeConstant = 0.8;
+            analizador.fftSize = 1024;
+
+            microfono.connect(analizador);
+            analizador.connect(nodoDeProcesamiento);
+            nodoDeProcesamiento.connect(contextoDeAudio.destination);
+
+            let ultimaActualizacion = Date.now();
+
+            nodoDeProcesamiento.onaudioprocess = function() {
+                let array = new Uint8Array(analizador.frequencyBinCount);
+                analizador.getByteFrequencyData(array);
+                let locura = calcularLocuraDeLaVoz(array);
+
+                // Mover el círculo verticalmente basado en la locura
+                let altoVentana = window.innerHeight;
+                let circulo = document.getElementById('circulo');
+                let posicionY = altoVentana - ((locura / 128) * altoVentana) - (circulo.offsetHeight / 2);
+                circulo.style.top = posicionY + 'px';
+
+                // Cambiar el color del fondo basado en la locura
+                let colorAzul = Math.round((locura / 128) * 255);
+                let colorRojo = 255 - colorAzul;
+                document.body.style.backgroundColor = 'rgb(' + colorRojo + ', ' + colorRojo + ', ' + colorAzul + ')';
+                
+                // Cambiar el color del círculo basado en la locura
+                let colorVerde = 255 - colorAzul;
+                circulo.style.backgroundColor = 'rgb(0, ' + colorVerde + ', ' + colorAzul + ')';
+
+                // Mostrar los datos del pitch y del volumen
+                if (Date.now() - ultimaActualizacion > 700) {
+                    let pitch = locura.toFixed(2);
+                    let volumen = (Math.abs(array[0] - 128) / 128).toFixed(2);
+                    document.getElementById('pitch').textContent = pitch;
+                    document.getElementById('volumen').textContent = volumen;
+                    ultimaActualizacion = Date.now();
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error('Error al acceder al micrófono: ' + err);
+        });
+    </script>
+</body>
+</html>
